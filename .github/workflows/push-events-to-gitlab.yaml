@@ -1,4 +1,4 @@
-name: Trigger Gitlab Job on push event
+name: Trigger Gitlab Job on push events
 on: [push]
 jobs:
 
