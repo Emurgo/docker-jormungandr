@@ -1,0 +1,33 @@
+version: '3.7'
+services:
+  genesis-node:
+    restart: unless-stopped
+    image: emurgornd/jormungandr:0.8.0-rc4
+    networks:
+      - jormungandr-private
+    ports:
+      - "8443:8443"
+      - "8299:8299"
+    environment:
+      - JORMUNGANDR_EXTRA_ARGS=--enable-explorer
+      - PUBLIC_ADDRESS=internal
+      - PUBLIC_PORT=8299
+    volumes:
+      - ${PWD}/data/genesis-node:/data
+
+  trusted-peers:
+    restart: unless-stopped
+    image: emurgornd/jormungandr:0.8.0-rc4
+    networks:
+      - jormungandr-private
+    env_file:
+     - .env
+    environment:
+      - PUBLIC_ADDRESS=internal
+      - TRUSTED_PEER_ADDRESS=/ip4/genesis-node/tcp/8299
+      # - TRUSTED_PEER_ID=${TRUSTED_PEER_ID}
+      # - JORMUNGANDR_BLOCK0_HASH=${JORMUNGANDR_BLOCK0_HASH}
+
+networks:
+  jormungandr-private:
+    driver: bridge

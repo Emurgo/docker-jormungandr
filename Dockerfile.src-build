@@ -1,0 +1,21 @@
+ARG JORMUNGANDR_COMMIT=v0.7.5
+
+FROM emurgornd/jormungandr:src-${JORMUNGANDR_COMMIT} AS src
+
+FROM ubuntu:bionic AS src-build
+
+RUN apt-get update -qq && \
+    apt-get install -qy build-essential pkg-config libssl-dev curl && \
+    bash -c "curl https://sh.rustup.rs -sSf | bash -s -- -y"
+
+COPY --from=src /src /src
+# do stuff borrowed from https://github.com/input-output-hk/jormungandr/blob/master/docker/Dockerfile#L34
+RUN cd /src && \
+    export PATH=$HOME/.cargo/bin:$PATH && \
+    rustup install stable && \
+    rustup default stable && \
+    cargo build --release && \
+    cargo install --force --path jormungandr && \
+    cargo install --force --path jcli && \
+    mkdir -p /output && \
+    mv $HOME/.cargo/bin/jormungandr $HOME/.cargo/bin/jcli /output
