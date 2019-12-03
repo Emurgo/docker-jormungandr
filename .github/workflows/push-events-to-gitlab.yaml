@@ -1,7 +1,10 @@
 name: Trigger Gitlab Job on push events
-on: [push]
+on:
+  push:
+    paths:
+    - 'Dockerfile.*'
+    - 'assets/**'
 jobs:
-
   build:
     name: Build
     runs-on: ubuntu-latest
