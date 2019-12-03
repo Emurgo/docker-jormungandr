@@ -1,5 +1,4 @@
 #!/bin/bash
-# dummy
 
 source ~/.baids/baids
 if [ ! -z "${DEBUG}" ]
