@@ -1,0 +1,14 @@
+name: Trigger Gitlab Job on push event
+on: [push]
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Trigger Gitlab Job
+      uses: rcmorano/gitlab-webhook-trigger@master
+      env:
+        GITLAB_WEBHOOK_URL: ${{ secrets.GITLAB_WEBHOOK_URL }}
+        GITLAB_REF_TO_TRIGGER: master
+        SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}
