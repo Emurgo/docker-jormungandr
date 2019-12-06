@@ -60,7 +60,9 @@ then
   TRUSTED_PEER_HOST=$(echo $TRUSTED_PEER_ADDRESS | awk -F/ '{print $3}')
   TRUSTED_PEER_ADDRESS=$(echo $TRUSTED_PEER_ADDRESS | sed "s|${TRUSTED_PEER_HOST}|$(getent hosts $TRUSTED_PEER_HOST | awk '{print $1}')|g")
 
+  # clean up trusted_peers
   sed -i '/trusted_peers:/,/\$/{{/.*\(#\|- address:\| id: \).*/d;};}' ${DATA_DIR}/config.yaml
+  sed -i 's/trusted_peers: \[\]/trusted_peers:/' ${DATA_DIR}/config.yaml
   sed -i "s|trusted_peers:|trusted_peers:\n    - address: ${TRUSTED_PEER_ADDRESS}\n      id: ${TRUSTED_PEER_ID}|" ${DATA_DIR}/config.yaml
 fi
 
