@@ -1,8 +1,8 @@
 ARG JORMUNGANDR_VERSION=0.7.5
 ARG JORMUNGANDR_COMMIT=v0.7.5
 
-FROM emurgornd/jormungandr:src-${JORMUNGANDR_COMMIT//+/_} AS src
-FROM emurgornd/jormungandr:src-build-${JORMUNGANDR_COMMIT//+/_} AS src-build
+FROM emurgornd/jormungandr:src-${JORMUNGANDR_COMMIT} AS src
+FROM emurgornd/jormungandr:src-build-${JORMUNGANDR_COMMIT} AS src-build
 
 FROM ubuntu:bionic AS jormungandr
 ENV JORMUNGANDR_VERSION ${JORMUNGANDR_VERSION}
