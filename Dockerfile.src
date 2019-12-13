@@ -1,10 +1,12 @@
 FROM alpine AS src
 RUN apk add --no-cache git
 ARG JORMUNGANDR_COMMIT=v0.7.5
+ARG JORMUNGANDR_GIT_REPOSITORY=https://github.com/input-output-hk/jormungandr
 ENV JORMUNGANDR_COMMIT ${JORMUNGANDR_COMMIT}
+ENV JORMUNGANDR_GIT_REPOSITORY ${JORMUNGANDR_GIT_REPOSITORY}
 
-RUN git clone https://github.com/input-output-hk/jormungandr /src && \
+RUN git clone ${JORMUNGANDR_GIT_REPOSITORY} /src && \
     cd /src && \
-    git checkout $JORMUNGANDR_COMMIT && \
+    git checkout ${JORMUNGANDR_COMMIT} && \
     git submodule init && \
     git submodule update --recursive
