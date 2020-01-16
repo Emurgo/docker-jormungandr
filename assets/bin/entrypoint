@@ -15,31 +15,41 @@ then
   test -e config.yaml_BOOTSTRAP_BACKUP && mv config.yaml_BOOTSTRAP_BACKUP config.yaml
 fi
 
-if [ ! -z "${NODE_ID}" ]
+if [ "${PUBLIC_ID}" == "disabled" ]
 then
-  sed -i '/.* public_id:.*/d' ${DATA_DIR}/config.yaml
-  sed -i "s|^p2p:|p2p:\n  public_id: \"${NODE_ID}\"|" ${DATA_DIR}/config.yaml
+  sed -i '/public_id:.*/d' ${DATA_DIR}/config.yaml
 else
-  grep -q '.* public_id:' ${DATA_DIR}/config.yaml
-  if [ $? -ne 0 ]
+  if [ ! -z "${PUBLIC_ID}" ]
   then
-    NODE_ID=$(head -n10 /dev/urandom | xxd -l 24 -ps)
-    sed -i "s|^p2p:|p2p:\n  public_id: \"${NODE_ID}\"|" ${DATA_DIR}/config.yaml
+    sed -i '/.* public_id:.*/d' ${DATA_DIR}/config.yaml
+    sed -i "s|^p2p:|p2p:\n  public_id: \"${PUBLIC_ID}\"|" ${DATA_DIR}/config.yaml
+  else
+    grep -q '.* public_id:' ${DATA_DIR}/config.yaml
+    if [ $? -ne 0 ]
+    then
+      PUBLIC_ID=$(head -n10 /dev/urandom | xxd -l 24 -ps)
+      sed -i "s|^p2p:|p2p:\n  public_id: \"${PUBLIC_ID}\"|" ${DATA_DIR}/config.yaml
+    fi
   fi
 fi
 
-# if no public address was provided, try to guess it
-if [ -z "${PUBLIC_ADDRESS}" ]
+if [ "${PUBLIC_ADDRESS}" == "disabled" ]
 then
- PUBLIC_ADDRESS=$(curl ifconfig.co)
+  sed -i '/public_address:.*/d' ${DATA_DIR}/config.yaml
 else
-  # if set to internal, try to get eth0's ip
-  if [ "${PUBLIC_ADDRESS}" == "internal" ]
+  # if no public address was provided, try to guess it
+  if [ -z "${PUBLIC_ADDRESS}" ]
   then
-    PUBLIC_ADDRESS=$(ip -o -4 addr show dev eth0 | awk '{print $4}' | awk -F/ '{print $1}')
+   PUBLIC_ADDRESS=$(curl ifconfig.co)
+  else
+    # if set to internal, try to get eth0's ip
+    if [ "${PUBLIC_ADDRESS}" == "internal" ]
+    then
+      PUBLIC_ADDRESS=$(ip -o -4 addr show dev eth0 | awk '{print $4}' | awk -F/ '{print $1}')
+    fi
   fi
+  sed -i "s|public_address: \"/\(.*\)/\(.*\)/\(.*\)/\(.*\)\"|public_address: \"/\1/${PUBLIC_ADDRESS}/\3/${PUBLIC_PORT}\"|g" ${DATA_DIR}/config.yaml
 fi
-sed -i "s|public_address: \"/\(.*\)/\(.*\)/\(.*\)/\(.*\)\"|public_address: \"/\1/${PUBLIC_ADDRESS}/\3/${PUBLIC_PORT}\"|g" ${DATA_DIR}/config.yaml
 
 # make the p2p listen on any IP
 parse_yaml ${DATA_DIR}/config.yaml | grep -q p2p_listen_address.*0.0.0.0.*
