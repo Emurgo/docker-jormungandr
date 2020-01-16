@@ -6,8 +6,8 @@ Execute from repo root dir:
 
 ```
 DOCKER_IMAGE_NAME=emurgornd/jormungandr
-JORMUNGANDR_VERSION=0.7.5
-JORMUNGANDR_COMMIT=v0.7.5 # commit/tag/branch to checkout scripts from
+JORMUNGANDR_VERSION=0.8.6
+JORMUNGANDR_COMMIT=v0.8.6 # commit/tag/branch to checkout scripts from
 
 for target in src src-build
 do
@@ -41,7 +41,7 @@ It will then:
 
 You can also run it using plain docker:
 ```
-JORMUNGANDR_VERSION=0.7.5
+JORMUNGANDR_VERSION=0.8.6
 JORMUNGANDR_EXTRA_ARGS=--enable-explorer
 JORMUNGANDR_BLOCK0_HASH=_CHANGE_ME_
 TRUSTED_PEER_ID=_CHANGE_ME_
