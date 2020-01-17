@@ -6,6 +6,8 @@ then
   set -x
 fi
 
+export CONFIG_FILE=${DATA_DIR}/config.yaml
+
 # bootstrap the node
 if [ ! -e "${DATA_DIR}/block-0.bin" ]
 then
@@ -17,69 +19,115 @@ fi
 
 if [ "${PUBLIC_ID}" == "disabled" ]
 then
-  sed -i '/public_id:.*/d' ${DATA_DIR}/config.yaml
+  sed -i '/public_id:.*/d' ${CONFIG_FILE}
 else
   if [ ! -z "${PUBLIC_ID}" ]
   then
-    sed -i '/.* public_id:.*/d' ${DATA_DIR}/config.yaml
-    sed -i "s|^p2p:|p2p:\n  public_id: \"${PUBLIC_ID}\"|" ${DATA_DIR}/config.yaml
+    sed -i '/.* public_id:.*/d' ${CONFIG_FILE}
+    sed -i "s|^p2p:|p2p:\n  public_id: \"${PUBLIC_ID}\"|" ${CONFIG_FILE}
   else
-    grep -q '.* public_id:' ${DATA_DIR}/config.yaml
-    if [ $? -ne 0 ]
+    if [ ! -z "${LAN_AUTODISCOVERABLE}" ]
     then
+      LAN_IP=$(ip -o -4 addr show dev eth0 | awk '{print $4}' | awk -F/ '{print $1}')
+      PUBLIC_ID=$(printf "%048d\n" ${LAN_IP//.})
+    else
       PUBLIC_ID=$(head -n10 /dev/urandom | xxd -l 24 -ps)
-      sed -i "s|^p2p:|p2p:\n  public_id: \"${PUBLIC_ID}\"|" ${DATA_DIR}/config.yaml
     fi
+    cp -a ${CONFIG_FILE} ${CONFIG_FILE}-AUTODISCOVERABLE-${PUBLIC_ID}
+    CONFIG_FILE=${CONFIG_FILE}-AUTODISCOVERABLE-${PUBLIC_ID}
+    sed -i '/public_id:.*/d' ${CONFIG_FILE}
+    sed -i "s|^p2p:|p2p:\n  public_id: \"${PUBLIC_ID}\"|" ${CONFIG_FILE}
   fi
 fi
 
 if [ "${PUBLIC_ADDRESS}" == "disabled" ]
 then
-  sed -i '/public_address:.*/d' ${DATA_DIR}/config.yaml
+  sed -i '/public_address:.*/d' ${CONFIG_FILE}
 else
   # if no public address was provided, try to guess it
   if [ -z "${PUBLIC_ADDRESS}" ]
   then
    PUBLIC_ADDRESS=$(curl ifconfig.co)
   else
-    # if set to internal, try to get eth0's ip
+    # NOTE: use only for development/isolated purposes
+    # If set to internal, try to get eth0's ip. 
     if [ "${PUBLIC_ADDRESS}" == "internal" ]
     then
       PUBLIC_ADDRESS=$(ip -o -4 addr show dev eth0 | awk '{print $4}' | awk -F/ '{print $1}')
     fi
   fi
-  sed -i "s|public_address: \"/\(.*\)/\(.*\)/\(.*\)/\(.*\)\"|public_address: \"/\1/${PUBLIC_ADDRESS}/\3/${PUBLIC_PORT}\"|g" ${DATA_DIR}/config.yaml
+  sed -i "s|public_address: \"/\(.*\)/\(.*\)/\(.*\)/\(.*\)\"|public_address: \"/\1/${PUBLIC_ADDRESS}/\3/${PUBLIC_PORT}\"|g" ${CONFIG_FILE}
 fi
 
 # make the p2p listen on any IP
-parse_yaml ${DATA_DIR}/config.yaml | grep -q p2p_listen_address.*0.0.0.0.*
+parse_yaml ${CONFIG_FILE} | grep -q p2p_listen_address.*0.0.0.0.*
 if [ $? -ne 0 ]
 then
-  sed -i 's|p2p:|p2p:\n  listen_address: "/ip4/0.0.0.0/tcp/8299"|' ${DATA_DIR}/config.yaml
+  sed -i 's|p2p:|p2p:\n  listen_address: "/ip4/0.0.0.0/tcp/8299"|' ${CONFIG_FILE}
 fi
 # do the same for the REST api so we can access from outside the container
-parse_yaml ${DATA_DIR}/config.yaml | grep -q rest_listen_address.*0.0.0.0.*
+parse_yaml ${CONFIG_FILE} | grep -q rest_listen_address.*0.0.0.0.*
 if [ $? -ne 0 ]
 then
-  sed -i 's|listen:.*|listen: "0.0.0.0:8443"|' ${DATA_DIR}/config.yaml
+  sed -i 's|listen:.*|listen: "0.0.0.0:8443"|' ${CONFIG_FILE}
 fi
 
-# if a trusted peer is provided, override config.yaml's ones
-if [[ ! -z "${TRUSTED_PEER_ADDRESS}" ]] && [[ ! -z "${TRUSTED_PEER_ID}" ]]
+if [ ! -z "${CLEANUP_TRUSTED_PEERS}" ]
 then
-  TRUSTED_PEER_HOST=$(echo $TRUSTED_PEER_ADDRESS | awk -F/ '{print $3}')
-  TRUSTED_PEER_ADDRESS=$(echo $TRUSTED_PEER_ADDRESS | sed "s|${TRUSTED_PEER_HOST}|$(getent hosts $TRUSTED_PEER_HOST | awk '{print $1}')|g")
-
   # clean up trusted_peers
-  sed -i '/trusted_peers:/,/\$/{{/.*\(#\|- address:\| id: \).*/d;};}' ${DATA_DIR}/config.yaml
-  sed -i 's/trusted_peers: \[\]/trusted_peers:/' ${DATA_DIR}/config.yaml
-  sed -i "s|trusted_peers:|trusted_peers:\n    - address: ${TRUSTED_PEER_ADDRESS}\n      id: ${TRUSTED_PEER_ID}|" ${DATA_DIR}/config.yaml
+  sed -i '/trusted_peers:/,/\$/{{/.*\(#\|- address:\| id: \).*/d;};}' ${CONFIG_FILE}
+  sed -i 's/trusted_peers:.*/trusted_peers: []/' ${CONFIG_FILE}
+fi
+
+if [ -z "$(grep trusted_peers ${CONFIG_FILE})" ]
+then
+  sed -i 's|p2p:|p2p:\n  trusted_peers: []|' ${CONFIG_FILE}
+fi
+
+if [ ! -z "${TRUSTED_PEERS_AUTODISCOVERY}" ]
+then
+
+  LAN_IP=$(ip -o -4 addr show dev eth0 | awk '{print $4}' | awk -F/ '{print $1}')
+  LAN_IP_RANGE=$(echo $LAN_IP | awk -F. '$0=$1"."$2"."$3".0/24"')
+  # Get alive nodes in current /24 net and sort them by highest blockheight,
+  # then add it in order to trusted peers using default dummy public_id
+  nmap -T5 --max-parallelism=255 --min-parallelism=100 -sn ${LAN_IP_RANGE} | grep trusted-peers | awk '{print $NF}' | sed 's|[()]||g' | sort | uniq | while read ip
+  do
+    NODE_LASTBLOCKHEIGHT=$(JORMUNGANDR_RESTAPI_URL=http://${ip}:8443/api jcli rest v0 node stats get --output-format json | jq -r '.lastBlockHeight')
+    if [ -z "${NODE_LASTBLOCKHEIGHT}" ]
+    then
+      NODE_LASTBLOCKHEIGHT=null
+    fi
+    echo ${ip} ${NODE_LASTBLOCKHEIGHT}
+  done | sort -r -nk2 | while read node
+  do
+    IP=$(echo $node | awk '{print $1}')
+    ID=$(printf "%048d\n" ${IP//.})
+    sed -i 's/trusted_peers: \[\]/trusted_peers:/' ${CONFIG_FILE}
+    sed -i "s|trusted_peers:|trusted_peers:\n    - address: \"/ip4/${IP}/tcp/8299\"\n      id: ${ID}|" ${CONFIG_FILE}
+  done
+
+fi
+
+# if a "first" trusted peer is provided, inject it first place in trusted_peer array
+if [[ ! -z "${FIRST_TRUSTED_PEER_ADDRESS}" ]] && [[ ! -z "${FIRST_TRUSTED_PEER_ID}" ]]
+then
+  FIRST_TRUSTED_PEER_HOST=$(echo $FIRST_TRUSTED_PEER_ADDRESS | awk -F/ '{print $3}')
+  FIRST_TRUSTED_PEER_ADDRESS=$(echo $FIRST_TRUSTED_PEER_ADDRESS | sed "s|${FIRST_TRUSTED_PEER_HOST}|$(getent hosts $FIRST_TRUSTED_PEER_HOST | awk '{print $1}')|g")
+
+  sed -i 's/trusted_peers: \[\]/trusted_peers:/' ${CONFIG_FILE}
+  sed -i "s|trusted_peers:|trusted_peers:\n    - address: \"${FIRST_TRUSTED_PEER_ADDRESS}\"\n      id: ${FIRST_TRUSTED_PEER_ID}|" ${CONFIG_FILE}
+fi
+
+# specify default config file if none was provided
+CONFIG_ARG=$(echo ${JORMUNGANDR_ARGS} ${JORMUNGANDR_EXTRA_ARGS} | grep -q -- --config || echo --config ${CONFIG_FILE})
+if [ ! -z "${POOL_MODE}" ]
+then
+  SECRET_ARG="--secret ${DATA_DIR}/pool-secret1.yaml"
 fi
 
 if [ ! -z "${JORMUNGANDR_ARGS}" ]
 then
-  # specify default config file if none was provided
-  CONFIG_ARG=$(echo ${JORMUNGANDR_ARGS} | grep -q -- --config || echo -- --config ${DATA_DIR}/config.yaml)
   jormungandr ${JORMUNGANDR_ARGS} \
     ${CONFIG_ARG}
 else
@@ -87,12 +135,12 @@ else
   then
     jormungandr ${JORMUNGANDR_EXTRA_ARGS} \
       --genesis-block-hash ${JORMUNGANDR_BLOCK0_HASH} \
-      --config ${DATA_DIR}/config.yaml \
-      --secret ${DATA_DIR}/pool-secret1.yaml
+      ${CONFIG_ARG} \
+      ${SECRET_ARG}
   else
     jormungandr ${JORMUNGANDR_EXTRA_ARGS} \
       --genesis-block ${DATA_DIR}/block-0.bin \
-      --config ${DATA_DIR}/config.yaml \
-      --secret ${DATA_DIR}/pool-secret1.yaml
+      ${CONFIG_ARG}  \
+      ${SECRET_ARG}
   fi
 fi
