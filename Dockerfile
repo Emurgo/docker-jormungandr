@@ -20,7 +20,7 @@ ENV PUBLIC_PORT 8299
 ENV JORMUNGANDR_RESTAPI_URL http://localhost:8443/api
 
 RUN apt-get update -qq && \
-    apt-get install -y git curl sudo net-tools iproute2 jq xxd namp
+    apt-get install -y git curl sudo net-tools iproute2 jq xxd nmap
 
 USER nobody
 RUN curl -sSL https://raw.githubusercontent.com/rcmorano/baids/master/baids | bash -s install && \
